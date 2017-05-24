@@ -82,8 +82,8 @@ type FileReadState struct {
 //LoadState 加载当前文件读取的状态
 func (state *FileReadState) LoadState() bool {
 
-	// state.offset = int64(0)
-	// state.handlingByte = make([]byte, 0)
+	//state.offset = int64(0)
+	//state.handlingByte = make([]byte, 0)
 	hashPath := PathToHashCode(state.logPath)
 	stateFilePath := path.Join(state.stateFileDir, hashPath)
 	exist, _ := PathExists(stateFilePath)
@@ -101,11 +101,12 @@ func (state *FileReadState) LoadState() bool {
 		fd, _ := os.OpenFile(stateFilePath, os.O_RDWR, 0644)
 		defer fd.Close()
 
-		stateByte := make([]byte, 256)
+		stateByte := make([]byte, 1024)
 		n, _ := fd.Read(stateByte)
 		if n == 0 {
-			state.offset = int64(0)
-			state.handlingByte = make([]byte, 0)
+			//state.offset = int64(0)
+			//state.handlingByte = make([]byte, 0)
+			fmt.Println(int64(0))
 			return true
 		}
 		b := stateByte[:n]
@@ -124,11 +125,14 @@ func (state *FileReadState) LoadState() bool {
 			handlingByte = append(handlingByte, value)
 		}
 		offset, _ := strconv.ParseInt(string(ob), 10, 64)
-		state.offset = offset
-		state.handlingByte = handlingByte
+		//state.offset = offset
+		//state.handlingByte = handlingByte
+		fmt.Println("LoadState", offset)
+		fmt.Println("LoadState", len(handlingByte))
+		fmt.Println("LoadState", n)
 
 	}
-	//fmt.Println(state.offset)
+
 	//fmt.Println(state.handlingByte)
 	return true
 }
@@ -140,9 +144,13 @@ func (state *FileReadState) Save() {
 	stateFilePath := path.Join(state.stateFileDir, hashPath)
 	fd, _ := os.OpenFile(stateFilePath, os.O_RDWR, 0644)
 	defer fd.Close()
+	fmt.Println("Save", state.offset)
+	fmt.Println("Save", len(state.handlingByte))
 	so := strconv.FormatInt(state.offset, 10)
 	b := append([]byte(so), []byte{'\n'}...)
+
 	b = append(b, state.handlingByte...)
+	fmt.Println("Save", len(b))
 	fd.Write(b)
 }
 
@@ -154,11 +162,16 @@ func (state *FileReadState) Read() {
 		fmt.Println("Failed to open log file", err)
 		return
 	}
-	fmt.Println(state.offset)
+	fmt.Println("Read", state.offset)
+	fmt.Println("Read", len(state.handlingByte))
 	file.Seek(state.offset, 0)
 	lineBuffer := make([]byte, state.maxReadSize)
+
 	var readCount = 0
 	for {
+		if readCount >= state.maxReadSize {
+			break
+		}
 		n, err := file.Read(lineBuffer) //读取文件
 		if err != nil {
 			if err == io.EOF {
@@ -170,19 +183,19 @@ func (state *FileReadState) Read() {
 		if n == 0 {
 			break
 		}
-		state.offset = state.offset + int64(n)
+		//state.offset = state.offset + int64(n)
 		b := lineBuffer[:n]
 		for _, value := range b {
 			state.handlingByte = append(state.handlingByte, value)
 			readCount++
+			state.offset++
+
 			if value == '\n' {
 				line := string(state.handlingByte)
 				fmt.Print(line)
 				//state.lines <- line
 				state.handlingByte = make([]byte, 0)
-			}
-			if readCount >= state.maxReadSize {
-				return
+
 			}
 		}
 	}

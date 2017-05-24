@@ -7,7 +7,7 @@ import (
 	"io"
 	"os"
 	"strings"
-
+	"path"
 	"github.com/robfig/cron"
 )
 
@@ -42,9 +42,7 @@ func main() {
 	})
 
 	c.Start()
-	go anylizline(analyzChan)
-
-	select {}
+	anylizline(analyzChan)
 }
 
 //检查文件状态，
@@ -83,13 +81,22 @@ type FileReadState struct {
 //LoadState 加载当前文件读取的状态
 func (state *FileReadState) LoadState() {
 	//读取文件状态，如果不存在则创建
+	ext  := path.Ext(state.logPath);
+	fmt.Println(ext);
+	sub := []rune(state.logPath)
+	aPath := []string{string(sub[:len(sub)-3]),".state"}
+	fullPath := strings.Join(aPath,"")
+	file, err := os.Open(state.logPath)
+	if err == nil {
+		
+	}
 	state.offset = int64(0)
 	state.handlingByte = make([]byte, 0)
 }
 
 //Save 保存状态
 func (state *FileReadState) Save() {
-
+	
 }
 
 //读取文件内容
@@ -123,13 +130,26 @@ func (state *FileReadState) Read() {
 			state.handlingByte = append(state.handlingByte, value)
 			if value == '\n' {
 				line := string(state.handlingByte)
-				fmt.Print(line)
-				//state.lines <- line
+				//fmt.Print(line)
+				state.lines <- line
 				state.handlingByte = make([]byte, 0)
 			}
 			if readCount >= state.maxReadSize {
+				state.Save()
 				break
 			}
 		}
 	}
 }
+
+
+func PathExists(path string) (bool, error) {
+		_, err := os.Stat(path)
+		if err == nil {
+			return true, nil
+		}
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, err
+	}

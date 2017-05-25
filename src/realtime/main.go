@@ -4,7 +4,6 @@ package main
 import (
 	"bufio"
 	"crypto/sha1"
-	"encoding/binary"
 	"flag"
 	"fmt"
 	"io"
@@ -25,20 +24,24 @@ func main() {
 	var minite string
 	var hour string
 	var logPath string
+	var stateFileDir string
+	var analyseType string
 	flag.StringVar(&second, "second", "2", "crontab seconds")
 	flag.StringVar(&minite, "minite", "0", "crontab minite")
 	flag.StringVar(&hour, "hour", "0", "crontab hour")
-	flag.StringVar(&logPath, "logPath", "../../api.log", "log file path")
+	flag.StringVar(&logPath, "logPath", "./../api.log", "log file path")
+	flag.StringVar(&stateFileDir, "stateFileDir", "./", "state persist dir")
+	flag.StringVar(&analyseType, "analyseType", "Api", "分析文件的类型")
 	flag.Parse()
 
 	c := cron.New()
 	crontabS := strings.Join([]string{second, minite, hour, "*", "*", "*"}, " ")
 	fmt.Println("crontab is", crontabS)
 
-	var state = FileReadState{logPath: logPath, lines: analyzChan, maxReadSize: 1024, stateFileDir: "./"}
+	var state = FileReadState{logPath: logPath, lines: analyzChan, maxReadSize: 2 * 1024 * 1024, stateFileDir: stateFileDir}
 	state.LoadState()
 
-	c.AddFunc("*/1 * * * *", func() {
+	c.AddFunc("*/5 * * * *", func() {
 		process(&state)
 	})
 
@@ -50,7 +53,7 @@ func main() {
 		}
 	}()
 
-	anylizline(analyzChan)
+	anylizline(analyzChan, analyseType)
 }
 
 //检查文件状态，
@@ -64,10 +67,12 @@ func process(state *FileReadState) {
 	state.Read()
 }
 
-func anylizline(lineChan chan string) {
+func anylizline(lineChan chan string, analyseType string) {
 	for {
 		line := <-lineChan
-		fmt.Print(line)
+		if analyseType == "Api" {
+			AnalyseAPILogs(line)
+		}
 	}
 }
 
@@ -170,8 +175,8 @@ func (state *FileReadState) Read() {
 			state.offset++
 			if value == '\n' {
 				line := string(state.handlingByte)
-				fmt.Print(line)
-				//state.lines <- line
+				//fmt.Print(line)
+				state.lines <- line
 				state.handlingByte = make([]byte, 0)
 			}
 		}
@@ -200,16 +205,4 @@ func pathToHashCode(filePath string) string {
 	io.WriteString(t, filePath)
 	return fmt.Sprintf("%x", t.Sum(nil))
 
-}
-
-//Int64ToBytes int64 to []byte
-func Int64ToBytes(i int64) []byte {
-	var buf = make([]byte, 8)
-	binary.BigEndian.PutUint64(buf, uint64(i))
-	return buf
-}
-
-//BytesToInt64 []byte to int64
-func BytesToInt64(buf []byte) int64 {
-	return int64(binary.BigEndian.Uint64(buf))
 }

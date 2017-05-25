@@ -11,7 +11,7 @@ import (
 	"path"
 	"strconv"
 	"strings"
-
+	"io/ioutil"
 	"github.com/robfig/cron"
 )
 
@@ -86,54 +86,35 @@ func (state *FileReadState) LoadState() bool {
 	//state.handlingByte = make([]byte, 0)
 	hashPath := PathToHashCode(state.logPath)
 	stateFilePath := path.Join(state.stateFileDir, hashPath)
-	exist, _ := PathExists(stateFilePath)
-	if !exist {
-		stateFile, err := os.Create(stateFilePath)
-		defer stateFile.Close()
-		if err != nil {
-			fmt.Println("read error:", err)
-			return false
-		}
-		stateFile.Write([]byte{0})
-		state.offset = int64(0)
-		state.handlingByte = make([]byte, 0)
-	} else {
-		fd, _ := os.OpenFile(stateFilePath, os.O_RDWR, 0644)
-		defer fd.Close()
+	content , err := ioutil.ReadFile(stateFilePath)
 
-		stateByte := make([]byte, 1024)
-		n, _ := fd.Read(stateByte)
-		if n == 0 {
-			//state.offset = int64(0)
-			//state.handlingByte = make([]byte, 0)
-			fmt.Println(int64(0))
-			return true
-		}
-		b := stateByte[:n]
-		ob := make([]byte, 0)
-		handlingByte := make([]byte, 0)
-		line := 1
-		for _, value := range b {
-			if value == '\n' {
-				line++
-				continue
-			}
-			if line == 1 {
-				ob = append(ob, value)
-				continue
-			}
-			handlingByte = append(handlingByte, value)
-		}
-		offset, _ := strconv.ParseInt(string(ob), 10, 64)
-		//state.offset = offset
-		//state.handlingByte = handlingByte
-		fmt.Println("LoadState", offset)
-		fmt.Println("LoadState", len(handlingByte))
-		fmt.Println("LoadState", n)
-
+	if  err == nil{
+		fmt.Println("nil")
+		return false;
 	}
-
-	//fmt.Println(state.handlingByte)
+	if(err == io.EOF){
+		fmt.Println("EOF")
+		return false;
+	}
+	ob := make([]byte, 0)
+	handlingByte := make([]byte, 0)
+	line := 1
+	for _, value := range content {
+	   if value == '\n' {
+		 line++
+		 continue
+	   }
+	   if line == 1 {
+			ob = append(ob, value)
+			continue
+	   }
+	   handlingByte = append(handlingByte, value)
+	}
+	offset, _ := strconv.ParseInt(string(ob), 10, 64)
+	fmt.Println("LoadState", offset)
+	fmt.Println("LoadState", len(handlingByte))
+	state.offset = offset
+	state.handlingByte = handlingByte
 	return true
 }
 
@@ -142,16 +123,13 @@ func (state *FileReadState) Save() {
 
 	hashPath := PathToHashCode(state.logPath)
 	stateFilePath := path.Join(state.stateFileDir, hashPath)
-	fd, _ := os.OpenFile(stateFilePath, os.O_RDWR, 0644)
-	defer fd.Close()
-	fmt.Println("Save", state.offset)
-	fmt.Println("Save", len(state.handlingByte))
 	so := strconv.FormatInt(state.offset, 10)
 	b := append([]byte(so), []byte{'\n'}...)
-
 	b = append(b, state.handlingByte...)
 	fmt.Println("Save", len(b))
-	fd.Write(b)
+	ioutil.WriteFile(stateFilePath, b, os.ModeAppend)
+	fmt.Println("Save", state.offset)
+	fmt.Println("Save", len(state.handlingByte))
 }
 
 //读取文件内容
@@ -195,10 +173,11 @@ func (state *FileReadState) Read() {
 				fmt.Print(line)
 				//state.lines <- line
 				state.handlingByte = make([]byte, 0)
-
+				
 			}
 		}
 	}
+	fmt.Println("----->" , len(state.handlingByte))
 	state.Save()
 }
 

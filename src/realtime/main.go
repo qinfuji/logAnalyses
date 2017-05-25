@@ -2,16 +2,18 @@
 package main
 
 import (
+	"bufio"
 	"crypto/sha1"
 	"encoding/binary"
 	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
 	"path"
 	"strconv"
 	"strings"
-	"io/ioutil"
+
 	"github.com/robfig/cron"
 )
 
@@ -33,7 +35,7 @@ func main() {
 	crontabS := strings.Join([]string{second, minite, hour, "*", "*", "*"}, " ")
 	fmt.Println("crontab is", crontabS)
 
-	var state = FileReadState{logPath: logPath, lines: analyzChan, maxReadSize: 64, stateFileDir: "./"}
+	var state = FileReadState{logPath: logPath, lines: analyzChan, maxReadSize: 1024, stateFileDir: "./"}
 	state.LoadState()
 
 	c.AddFunc("*/1 * * * *", func() {
@@ -41,6 +43,13 @@ func main() {
 	})
 
 	c.Start()
+
+	defer func() { // 必须要先声明defer，否则不能捕获到panic异常
+		if err := recover(); err != nil {
+			fmt.Println(err) // 这里的err其实就是panic传入的内容，55
+		}
+	}()
+
 	anylizline(analyzChan)
 }
 
@@ -82,54 +91,49 @@ type FileReadState struct {
 //LoadState 加载当前文件读取的状态
 func (state *FileReadState) LoadState() bool {
 
-	//state.offset = int64(0)
-	//state.handlingByte = make([]byte, 0)
-	hashPath := PathToHashCode(state.logPath)
+	state.offset = int64(0)
+	state.handlingByte = make([]byte, 0)
+	hashPath := pathToHashCode(state.logPath)
 	stateFilePath := path.Join(state.stateFileDir, hashPath)
-	content , err := ioutil.ReadFile(stateFilePath)
-
-	if  err == nil{
-		fmt.Println("nil")
-		return false;
+	var f *os.File
+	var err1 error
+	if checkFileIsExist(stateFilePath) { //如果文件存在
+		f, err1 = os.Open(stateFilePath) //打开文件
+		check(err1)
+		if err1 == nil {
+			scanner := bufio.NewScanner(f)
+			line := 0
+			for scanner.Scan() {
+				o := scanner.Text()
+				if line == 0 {
+					offset, _ := strconv.ParseInt(o, 10, 64)
+					state.offset = offset
+				} else {
+					state.handlingByte = scanner.Bytes()
+				}
+				line++
+			}
+		}
+	} else {
+		f, err1 = os.Create(stateFilePath) //创建文件
+		state.offset = int64(0)
+		state.handlingByte = []byte{}
 	}
-	if(err == io.EOF){
-		fmt.Println("EOF")
-		return false;
+	check(err1)
+	if err1 != nil {
+		defer f.Close()
 	}
-	ob := make([]byte, 0)
-	handlingByte := make([]byte, 0)
-	line := 1
-	for _, value := range content {
-	   if value == '\n' {
-		 line++
-		 continue
-	   }
-	   if line == 1 {
-			ob = append(ob, value)
-			continue
-	   }
-	   handlingByte = append(handlingByte, value)
-	}
-	offset, _ := strconv.ParseInt(string(ob), 10, 64)
-	fmt.Println("LoadState", offset)
-	fmt.Println("LoadState", len(handlingByte))
-	state.offset = offset
-	state.handlingByte = handlingByte
 	return true
 }
 
 //Save 保存状态
 func (state *FileReadState) Save() {
-
-	hashPath := PathToHashCode(state.logPath)
+	hashPath := pathToHashCode(state.logPath)
 	stateFilePath := path.Join(state.stateFileDir, hashPath)
 	so := strconv.FormatInt(state.offset, 10)
-	b := append([]byte(so), []byte{'\n'}...)
-	b = append(b, state.handlingByte...)
-	fmt.Println("Save", len(b))
-	ioutil.WriteFile(stateFilePath, b, os.ModeAppend)
-	fmt.Println("Save", state.offset)
-	fmt.Println("Save", len(state.handlingByte))
+	d := append([]byte(so), []byte{'\n'}...)
+	d = append(d, state.handlingByte...)
+	ioutil.WriteFile(stateFilePath, d, 0666) //写入文件(字节数组)
 }
 
 //读取文件内容
@@ -140,8 +144,6 @@ func (state *FileReadState) Read() {
 		fmt.Println("Failed to open log file", err)
 		return
 	}
-	fmt.Println("Read", state.offset)
-	fmt.Println("Read", len(state.handlingByte))
 	file.Seek(state.offset, 0)
 	lineBuffer := make([]byte, state.maxReadSize)
 
@@ -161,40 +163,39 @@ func (state *FileReadState) Read() {
 		if n == 0 {
 			break
 		}
-		//state.offset = state.offset + int64(n)
 		b := lineBuffer[:n]
 		for _, value := range b {
 			state.handlingByte = append(state.handlingByte, value)
 			readCount++
 			state.offset++
-
 			if value == '\n' {
 				line := string(state.handlingByte)
 				fmt.Print(line)
 				//state.lines <- line
 				state.handlingByte = make([]byte, 0)
-				
 			}
 		}
 	}
-	fmt.Println("----->" , len(state.handlingByte))
 	state.Save()
 }
 
 //PathExists 判断文件是否存在
-func PathExists(path string) (bool, error) {
-	_, err := os.Stat(path)
-	if err == nil {
-		return true, nil
+func checkFileIsExist(filename string) bool {
+	var exist = true
+	if _, err := os.Stat(filename); os.IsNotExist(err) {
+		exist = false
 	}
-	if os.IsNotExist(err) {
-		return false, nil
+	return exist
+}
+
+func check(e error) {
+	if e != nil {
+		panic(e)
 	}
-	return false, err
 }
 
 //PathToHashCode 转换文件路径到hash
-func PathToHashCode(filePath string) string {
+func pathToHashCode(filePath string) string {
 	t := sha1.New()
 	io.WriteString(t, filePath)
 	return fmt.Sprintf("%x", t.Sum(nil))

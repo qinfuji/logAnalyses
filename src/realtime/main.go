@@ -16,9 +16,16 @@ import (
 	"github.com/robfig/cron"
 )
 
+//MetricDetail 指标结构
+type MetricDetail struct {
+	metric    string  //指标名称
+	value     float64 //指标值
+	timestamp int64   //时间， 分钟
+}
+
 func main() {
-	analyzChan := make(chan string) //行分析队列
-	//resultChan := make(chan TimeStatisticResult) //处理后的结果队列
+	analyzChan := make(chan string, 10)             //行分析队列
+	metricDetailChan := make(chan MetricDetail, 10) //处理后的结果队列
 
 	var second string
 	var minite string
@@ -53,7 +60,18 @@ func main() {
 		}
 	}()
 
-	anylizline(analyzChan, analyseType)
+	if analyseType == "Api" { //接口调用
+		go AnalyseAPILogs(analyzChan, metricDetailChan)
+	} else if analyseType == "Location" { //本地化
+
+	} else if analyseType == "Clean" { //内容清洗
+
+	} else if analyseType == "Tran" { //视屏转码
+
+	}
+	go SendMetricDetails(metricDetailChan)
+
+	select {}
 }
 
 //检查文件状态，
@@ -65,21 +83,6 @@ func checkState(state *FileReadState) bool {
 func process(state *FileReadState) {
 	state.LoadState()
 	state.Read()
-}
-
-func anylizline(lineChan chan string, analyseType string) {
-	for {
-		line := <-lineChan
-		if analyseType == "Api" {
-			AnalyseAPILogs(line)
-		}
-	}
-}
-
-type TimeStatisticResult struct {
-	timeStamp  int
-	metricName string
-	value      int
 }
 
 //FileReadState 文件读状态

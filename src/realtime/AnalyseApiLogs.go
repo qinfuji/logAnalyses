@@ -3,44 +3,47 @@ package main
 import (
 	"fmt"
 	"regexp"
+	"strconv"
 	"time"
 )
 
-type Detail struct {
-	metric    string //指标名称
-	value     int    //指标值
-	timestamp int    //时间， 分钟
-}
-
-var details map[int]*Detail
-
 //AnalyseAPILogs 分析
-func AnalyseAPILogs(lineChan chan string) {
+func AnalyseAPILogs(lineChan chan string, outChan chan MetricDetail) {
 
 	for line := range lineChan {
-		parse(line)
+		detail := parse(line)
+		if detail != nil {
+			continue
+		}
+		outChan <- *detail
 	}
 }
 
-//2017-05-23T00:00:09+08:00 wemedia_service_21_syq service_sys 10.90.6.59 - - [23/May/2017:00:00:00 +0800] "GET /content/getContentDetail?id=0158b012-b817-4f03-b107-f2d93dc9b571 HTTP/1.1" "local.fhhapi.ifeng.com" - 200 3562 "-" "-" "10.90.2.36" "0.002"(s)
+func parse(line string) *MetricDetail {
 
-func parse(line string) Detail {
-	s := `2017-05-23T00:00:09+08:00 wemedia_service_21_syq service_sys 10.90.6.59 - - [23/May/2017:00:00:00 +0800] "GET /content/getContentDetail?id=0158b012-b817-4f03-b107-f2d93dc9b571 HTTP/1.1" "local.fhhapi.ifeng.com" - 200 3562 "-" "-" "10.90.2.36" "0.002"(s)`
-	d := regexp.MustCompile(`\[(.*?)\]`).FindAllStringSubmatch(s, -1)
-	fmt.Println(d[0][1])
-	stime, err := time.Parse("02/Jan/2006:15:04:05 -0700", d[0][1])
-	//the_time, err := time.Parse("02/Jan/2006:15:04",  "23/May/2017:00:20") 格式取整
+	res := regexp.MustCompile(`\[(.*?)\] ".*? (.*?) .*?".*"(.*?)"\(s\)`).FindAllStringSubmatch(line, -1)
+	d := res[0][1]   //时间
+	url := res[0][2] //指标url
+	pt := res[0][3]  //指标处理时间
+	//将时间装换成分钟精度,去掉秒的数据
+	stime, err := time.Parse("02/Jan/2006:15:04:05 -0700", d)                                                    //转换时间
+	atime := time.Date(stime.Year(), stime.Month(), stime.Day(), stime.Hour(), stime.Minute(), 0, 0, time.Local) //修改后的时间
+	st := atime.Unix()
+	baseURL, queryString := parseURL(url)
+	detail := MetricDetail{}
+	detail.metric = baseURL
+	detail.timestamp = st
+	value, err := strconv.ParseFloat(pt, 32)
 	if err == nil {
-		unixtime := stime.Unix()
-		fmt.Println(unixtime)
-	} else {
-		fmt.Println(err)
+		return nil
 	}
+	detail.value = value
+	return &detail
+}
 
-	url := regexp.MustCompile(`GET (.*?) HTTP`).FindAllStringSubmatch(s, -1)
-	fmt.Println(url[0][1])
-
-	v := regexp.MustCompile(`"(.*?)"`).FindAllStringSubmatch(s, -1)
-	fmt.Println(v[len(v)-1][1])
-	return Detail{}
+func parseURL(url string) (baseURL string, queryString string) {
+	//line := `/content/getContentDetail?id=0158b012-b817-4f03-b107-f2d93dc9b571&aqsdasd`
+	res := regexp.MustCompile(`(.*?)\?(.*)`).FindAllStringSubmatch(queryString, -1)
+	fmt.Println(res)
+	return res[0][1], res[0][2]
 }

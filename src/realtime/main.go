@@ -49,7 +49,7 @@ func main() {
 	flag.StringVar(&hour, "hour", "0", "crontab hour")
 	flag.StringVar(&logPath, "logPath", "./../api.log", "log file path")
 	flag.StringVar(&stateFileDir, "stateFileDir", "./", "state persist dir")
-	flag.StringVar(&analyseType, "analyseType", "Api", "分析文件的类型")
+	flag.StringVar(&analyseType, "analyseType", "QueryApi", "分析文件的类型") //QueryApi |  BusApi
 	flag.Parse()
 
 	//c := cron.New()
@@ -57,7 +57,7 @@ func main() {
 	fmt.Println("crontab is", crontabS)
 
 	waitGroup.Add(1)
-	var state = FileReadState{logPath: logPath, lines: lineChan, maxReadSize: 2 * 1024 * 1024, stateFileDir: stateFileDir, waitGroup: &waitGroup}
+	var state = FileReadState{logPath: logPath, lines: lineChan, maxReadSize: 5 * 1024 * 1024, stateFileDir: stateFileDir, waitGroup: &waitGroup}
 	state.LoadState()
 
 	mcrom.AddFunc("*/5 * * * *", func() {

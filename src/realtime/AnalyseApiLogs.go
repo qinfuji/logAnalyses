@@ -4,13 +4,20 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
+	"sync"
 	"time"
 )
 
 //AnalyseAPILogs 分析
-func AnalyseAPILogs(lineChan chan string, outChan chan MetricDetail) {
-
-	for line := range lineChan {
+func AnalyseAPILogs(lineChan chan string, outChan chan MetricDetail, waitGroup *sync.WaitGroup) {
+	waitGroup.Add(1)
+	for {
+		line, ok := <-lineChan
+		if !ok {
+			fmt.Println("AnalyseAPILogs 管道关闭, 退出")
+			waitGroup.Done()
+			return
+		}
 		detail := parse(line)
 		if detail != nil {
 			continue
@@ -29,21 +36,14 @@ func parse(line string) *MetricDetail {
 	stime, err := time.Parse("02/Jan/2006:15:04:05 -0700", d)                                                    //转换时间
 	atime := time.Date(stime.Year(), stime.Month(), stime.Day(), stime.Hour(), stime.Minute(), 0, 0, time.Local) //修改后的时间
 	st := atime.Unix()
-	baseURL, queryString := parseURL(url)
+	baseURL, _ := ParseURL(url)
 	detail := MetricDetail{}
 	detail.metric = baseURL
 	detail.timestamp = st
-	value, err := strconv.ParseFloat(pt, 32)
+	value, err := strconv.ParseFloat(pt, 64)
 	if err == nil {
 		return nil
 	}
 	detail.value = value
 	return &detail
-}
-
-func parseURL(url string) (baseURL string, queryString string) {
-	//line := `/content/getContentDetail?id=0158b012-b817-4f03-b107-f2d93dc9b571&aqsdasd`
-	res := regexp.MustCompile(`(.*?)\?(.*)`).FindAllStringSubmatch(queryString, -1)
-	fmt.Println(res)
-	return res[0][1], res[0][2]
 }

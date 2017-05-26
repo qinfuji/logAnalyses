@@ -3,15 +3,17 @@ package main
 
 import (
 	"bufio"
-	"crypto/sha1"
 	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
+	"os/signal"
 	"path"
 	"strconv"
 	"strings"
+	"sync"
+	"syscall"
 
 	"github.com/robfig/cron"
 )
@@ -23,9 +25,18 @@ type MetricDetail struct {
 	timestamp int64   //时间， 分钟
 }
 
+var stop = false
+var stopLock sync.Mutex
+var signalChan = make(chan os.Signal, 1)
+var mcrom = cron.New()
+var lineChan = make(chan string, 10)               //行分析队列
+var metricDetailChan = make(chan MetricDetail, 10) //处理后的结果队列
+
+var readCloseChan = make(chan string) //文件读停止管道
+
+var waitGroup sync.WaitGroup //定义一个同步等待的组
+
 func main() {
-	analyzChan := make(chan string, 10)             //行分析队列
-	metricDetailChan := make(chan MetricDetail, 10) //处理后的结果队列
 
 	var second string
 	var minite string
@@ -41,18 +52,19 @@ func main() {
 	flag.StringVar(&analyseType, "analyseType", "Api", "分析文件的类型")
 	flag.Parse()
 
-	c := cron.New()
+	//c := cron.New()
 	crontabS := strings.Join([]string{second, minite, hour, "*", "*", "*"}, " ")
 	fmt.Println("crontab is", crontabS)
 
-	var state = FileReadState{logPath: logPath, lines: analyzChan, maxReadSize: 2 * 1024 * 1024, stateFileDir: stateFileDir}
+	waitGroup.Add(1)
+	var state = FileReadState{logPath: logPath, lines: lineChan, maxReadSize: 2 * 1024 * 1024, stateFileDir: stateFileDir, waitGroup: &waitGroup}
 	state.LoadState()
 
-	c.AddFunc("*/5 * * * *", func() {
+	mcrom.AddFunc("*/5 * * * *", func() {
 		process(&state)
 	})
 
-	c.Start()
+	mcrom.Start()
 
 	defer func() { // 必须要先声明defer，否则不能捕获到panic异常
 		if err := recover(); err != nil {
@@ -60,16 +72,22 @@ func main() {
 		}
 	}()
 
-	if analyseType == "Api" { //接口调用
-		go AnalyseAPILogs(analyzChan, metricDetailChan)
-	} else if analyseType == "Location" { //本地化
-
-	} else if analyseType == "Clean" { //内容清洗
-
-	} else if analyseType == "Tran" { //视屏转码
-
+	if analyseType == "QueryApi" { //客户端查询接口调用
+		go AnalyseAPILogs(lineChan, metricDetailChan, &waitGroup)
+	} else if analyseType == "BusApi" { //系统间调用接口
+		go AnalyseBusLogs(lineChan, metricDetailChan, &waitGroup)
 	}
-	go SendMetricDetails(metricDetailChan)
+	go SendMetricDetails(metricDetailChan, &waitGroup)
+
+	signal.Notify(signalChan,
+		os.Kill,
+		os.Interrupt,
+		syscall.SIGHUP,
+		syscall.SIGINT,
+		syscall.SIGTERM,
+		syscall.SIGQUIT)
+
+	go waitExitNotify(&waitGroup)
 
 	select {}
 }
@@ -94,6 +112,7 @@ type FileReadState struct {
 	lines         chan string //读取的管道
 	handlingByte  []byte      //在处理中的字节，当没有出现完整的行
 	stateFullName string      //状态文件的路,防止文件来回打开
+	waitGroup     *sync.WaitGroup
 }
 
 //LoadState 加载当前文件读取的状态
@@ -185,6 +204,10 @@ func (state *FileReadState) Read() {
 		}
 	}
 	state.Save()
+	if stop {
+		//如果已经停止则需要发送文件读完成消息
+		readCloseChan <- "close"
+	}
 }
 
 //PathExists 判断文件是否存在
@@ -202,10 +225,22 @@ func check(e error) {
 	}
 }
 
-//PathToHashCode 转换文件路径到hash
-func pathToHashCode(filePath string) string {
-	t := sha1.New()
-	io.WriteString(t, filePath)
-	return fmt.Sprintf("%x", t.Sum(nil))
+func waitExitNotify(waitGroup *sync.WaitGroup) {
+	<-signalChan
+	stopLock.Lock()
+	stop = true
+	stopLock.Unlock()
+	mcrom.Stop() //停止
+	fmt.Println("任务调度停止")
+	fmt.Println("等待文件读写停止")
+	<-readCloseChan
+	fmt.Println("文件读写停止")
 
+	fmt.Println("关闭行分析管道")
+	close(lineChan)
+	fmt.Println("关闭指标处理管道")
+	close(metricDetailChan)
+	waitGroup.Wait()
+	fmt.Println("系统退出")
+	os.Exit(0)
 }

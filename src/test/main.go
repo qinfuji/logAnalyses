@@ -2,10 +2,13 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/influxdata/influxdb/client/v2"
 )
 
 func main() {
@@ -21,18 +24,23 @@ func main() {
 	// ts := atime.Unix()
 	// fmt.Println(ts)
 
-	// parseURL(url)
+	//parseURL("")
 	// paseDetailQuery("")
 
 	//parseBusLog()
 
-	testChan()
+	//testChan()
+
+	//testMap()
+
+	sentInfulx()
+	select {}
 }
 
 func parseURL(url string) (baseURL string, queryString string) {
-	line := `/content/getContentDetail?id=0158b012-b817-4f03-b107-f2d93dc9b571&aqsdasd`
+	line := `/content/getContentDetail?id=16378201`
 	res := regexp.MustCompile(`(.*?)\?(.*)`).FindAllStringSubmatch(line, -1)
-	fmt.Println(res)
+	fmt.Println(res[0][1], res[0][2])
 	return res[0][1], res[0][2]
 }
 
@@ -70,18 +78,6 @@ func parseBusLog() {
 	fmt.Println(resTime, reqTime)
 	offsettime := (resTime - reqTime)
 	fmt.Println(offsettime / 1000)
-}
-
-//Sss ss
-type Sss struct {
-	a int
-}
-
-func testMap() {
-	var m = make(map[int]Sss, 0)
-	v, ok := m[1]
-	fmt.Println(v)
-	fmt.Println(ok)
 }
 
 //Tchan aa
@@ -135,5 +131,76 @@ func go2(tchan chan Tchan) {
 			fmt.Println("go2", i)
 		}
 
+	}
+}
+
+//StatisticStruct aa
+type StatisticStruct struct {
+	timestamp  int64
+	total      float64 //总时长
+	count      int     //总次数
+	metricName string  //指标名称
+}
+
+func testMap() {
+	m := make(map[int64]StatisticStruct, 0)
+	m[1] = StatisticStruct{}
+	m[2] = StatisticStruct{}
+	m[3] = StatisticStruct{}
+	m[4] = StatisticStruct{}
+	m[5] = StatisticStruct{}
+
+	for _, v := range m {
+		fmt.Println(v)
+	}
+}
+
+func sentInfulx() {
+	// body := make([]string, 0)
+	// //body = append(body, "test,host=server02 value=0.67 1434055562000000000\n")1434055562000000000
+	// body = append(body, "abc,host=server02 value=0.674 1495471620000")
+	// //body = append(body, "test224,host=server02 value=0.64 1495471620000\n")
+	// //body = append(body, "test224,host=server02 value=0.64 1495471620000")
+
+	// //sbody := strings.Join(body, "")
+	// resp, err := http.Post("http://10.50.8.91:8086/write?db=fhh&&precision=ms", "", strings.NewReader("abc1,host=server01,region=us-west value=0.64 1495471620000"))
+	// if err != nil {
+	// 	fmt.Println("save to influx err:", err)
+	// 	return
+	// }
+	// defer resp.Body.Close()
+	// data, _ := ioutil.ReadAll(resp.Body)
+	// fmt.Println(string(data))
+	c, err := client.NewHTTPClient(client.HTTPConfig{Addr: "http://10.50.8.91:8086"})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Create a new point batch
+	bp, err := client.NewBatchPoints(client.BatchPointsConfig{
+		Database:  "fhh",
+		Precision: "ms",
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Create a point and add to batch
+	tags := map[string]string{"cpu": "cpu-total"}
+	fields := map[string]interface{}{
+		"idle":   10.1,
+		"system": 53.3,
+		"user":   46.6,
+		"time":   1495875117}
+	fmt.Println(time.Now().Unix())
+	pt, err := client.NewPoint("myPoint4", tags, fields)
+	if err != nil {
+		fmt.Println(err)
+	}
+	bp.AddPoint(pt)
+
+	// Write the batch
+	if err := c.Write(bp); err != nil {
+		fmt.Println(err)
 	}
 }

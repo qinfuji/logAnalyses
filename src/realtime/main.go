@@ -8,12 +8,10 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
-	"os/signal"
 	"path"
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 
 	"github.com/robfig/cron"
 )
@@ -47,8 +45,8 @@ func main() {
 	flag.StringVar(&second, "second", "2", "crontab seconds")
 	flag.StringVar(&minite, "minite", "0", "crontab minite")
 	flag.StringVar(&hour, "hour", "0", "crontab hour")
-	flag.StringVar(&logPath, "logPath", "./../api.log", "log file path")
-	flag.StringVar(&stateFileDir, "stateFileDir", "./", "state persist dir")
+	flag.StringVar(&logPath, "logPath", "/Users/qinfuji/Documents/service_sys-20170526.log", "log file path")
+	flag.StringVar(&stateFileDir, "stateFileDir", "../..", "state persist dir")
 	flag.StringVar(&analyseType, "analyseType", "QueryApi", "分析文件的类型") //QueryApi |  BusApi
 	flag.Parse()
 
@@ -57,7 +55,7 @@ func main() {
 	fmt.Println("crontab is", crontabS)
 
 	waitGroup.Add(1)
-	var state = FileReadState{logPath: logPath, lines: lineChan, maxReadSize: 5 * 1024 * 1024, stateFileDir: stateFileDir, waitGroup: &waitGroup}
+	var state = FileReadState{logPath: logPath, lines: lineChan, maxReadSize: 100 * 1024 * 1024, stateFileDir: stateFileDir, waitGroup: &waitGroup}
 	state.LoadState()
 
 	mcrom.AddFunc("*/5 * * * *", func() {
@@ -79,15 +77,15 @@ func main() {
 	}
 	go SendMetricDetails(metricDetailChan, &waitGroup)
 
-	signal.Notify(signalChan,
-		os.Kill,
-		os.Interrupt,
-		syscall.SIGHUP,
-		syscall.SIGINT,
-		syscall.SIGTERM,
-		syscall.SIGQUIT)
+	// signal.Notify(signalChan,
+	// 	os.Kill,
+	// 	os.Interrupt,
+	// 	syscall.SIGHUP,
+	// 	syscall.SIGINT,
+	// 	syscall.SIGTERM,
+	// 	syscall.SIGQUIT)
 
-	go waitExitNotify(&waitGroup)
+	// go waitExitNotify(&waitGroup)
 
 	select {}
 }

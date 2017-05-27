@@ -37,7 +37,7 @@ func parseBusLine(line string) *MetricDetail {
 
 	stime, _ := time.Parse("02/Jan/2006:15:04:05 -0700", d)
 	atime := time.Date(stime.Year(), stime.Month(), stime.Day(), stime.Hour(), stime.Minute(), 0, 0, time.Local)
-	resTime := atime.Unix() * 1000
+	resTime := atime.Unix()
 
 	baseURL, _ := ParseURL(url)
 	offsettime := (resTime - reqTime)

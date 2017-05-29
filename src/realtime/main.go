@@ -42,12 +42,14 @@ func main() {
 	var logPath string
 	var stateFileDir string
 	var analyseType string
-	flag.StringVar(&second, "second", "2", "crontab seconds")
-	flag.StringVar(&minite, "minite", "0", "crontab minite")
+	flag.StringVar(&second, "second", "0", "crontab seconds")
+	flag.StringVar(&minite, "minite", "2", "crontab minite")
 	flag.StringVar(&hour, "hour", "0", "crontab hour")
-	flag.StringVar(&logPath, "logPath", "/Users/qinfuji/Documents/service_sys-20170526.log", "log file path")
+	//flag.StringVar(&logPath, "logPath", "/home/qinfuji/service_sys-20170526.log", "log file path")
+	flag.StringVar(&logPath, "logPath", "../../fhh_entry_sys.log", "log file path")
 	flag.StringVar(&stateFileDir, "stateFileDir", "../..", "state persist dir")
-	flag.StringVar(&analyseType, "analyseType", "QueryApi", "分析文件的类型") //QueryApi |  BusApi
+	//flag.StringVar(&analyseType, "analyseType", "QueryApi", "分析文件的类型") //QueryApi |  BusApi
+	flag.StringVar(&analyseType, "analyseType", "BusApi", "分析文件的类型") //QueryApi |  BusApi
 	flag.Parse()
 
 	//c := cron.New()
@@ -55,10 +57,10 @@ func main() {
 	fmt.Println("crontab is", crontabS)
 
 	waitGroup.Add(1)
-	var state = FileReadState{logPath: logPath, lines: lineChan, maxReadSize: 100 * 1024 * 1024, stateFileDir: stateFileDir, waitGroup: &waitGroup}
+	var state = FileReadState{logPath: logPath, lines: lineChan, maxReadSize: 10 * 1024 * 1024, stateFileDir: stateFileDir, waitGroup: &waitGroup}
 	state.LoadState()
 
-	mcrom.AddFunc("*/5 * * * *", func() {
+	mcrom.AddFunc("*/10 * * * *", func() {
 		process(&state)
 	})
 
@@ -71,7 +73,7 @@ func main() {
 	}()
 
 	if analyseType == "QueryApi" { //客户端查询接口调用
-		go AnalyseAPILogs(lineChan, metricDetailChan, &waitGroup)
+		//go AnalyseAPILogs(lineChan, metricDetailChan, &waitGroup)
 	} else if analyseType == "BusApi" { //系统间调用接口
 		go AnalyseBusLogs(lineChan, metricDetailChan, &waitGroup)
 	}
@@ -97,8 +99,10 @@ func checkState(state *FileReadState) bool {
 
 //开始处理文件
 func process(state *FileReadState) {
+	mcrom.Stop()
 	state.LoadState()
 	state.Read()
+	mcrom.Start()
 }
 
 //FileReadState 文件读状态

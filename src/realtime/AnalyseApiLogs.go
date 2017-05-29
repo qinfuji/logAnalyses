@@ -19,7 +19,7 @@ func AnalyseAPILogs(lineChan chan string, outChan chan MetricDetail, waitGroup *
 			return
 		}
 		detail := parse(line)
-		fmt.Println("AnalyseAPILogs", detail)
+		//fmt.Println("AnalyseAPILogs", detail)
 		if detail == nil {
 			continue
 		}
@@ -40,7 +40,8 @@ func parse(line string) *MetricDetail {
 	//将时间装换成分钟精度,去掉秒的数据
 	stime, err := time.Parse("02/Jan/2006:15:04:05 -0700", d)                                                    //转换时间
 	atime := time.Date(stime.Year(), stime.Month(), stime.Day(), stime.Hour(), stime.Minute(), 0, 0, time.Local) //修改后的时间
-	st := atime.Unix()
+	st := atime.UnixNano() / 1e6
+	fmt.Println("-->", url)
 	baseURL, _ := ParseURL(url)
 	if baseURL == "" {
 		fmt.Println("ParseURL err", url)
@@ -48,7 +49,7 @@ func parse(line string) *MetricDetail {
 	}
 	detail := MetricDetail{}
 	detail.metric = baseURL
-	detail.timestamp = st * 1000
+	detail.timestamp = st
 	value, err := strconv.ParseFloat(pt, 64)
 	if err != nil {
 		return nil

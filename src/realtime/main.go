@@ -60,7 +60,7 @@ func main() {
 	var state = FileReadState{logPath: logPath, lines: lineChan, maxReadSize: 10 * 1024 * 1024, stateFileDir: stateFileDir, waitGroup: &waitGroup}
 	state.LoadState()
 
-	mcrom.AddFunc("*/10 * * * *", func() {
+	mcrom.AddFunc("*/5 * * * *", func() {
 		process(&state)
 	})
 

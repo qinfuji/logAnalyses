@@ -2,16 +2,17 @@ package main
 
 import (
 	"fmt"
+	"io/ioutil"
 	"log"
+	"net/http"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/influxdata/influxdb/client/v2"
 )
 
 func main() {
+	//t := make(chan string)
 	// line := `2017-05-23T00:00:09+08:00 wemedia_service_21_syq service_sys 10.90.6.59 - - [23/May/2017:03:10:00 +0800] "GET /content/getContentDetail?id=0158b012-b817-4f03-b107-f2d93dc9b571 HTTP/1.1" "local.fhhapi.ifeng.com" - 200 3562 "-" "-" "10.90.2.36" "0.002"(s)`
 	// res := regexp.MustCompile(`\[(.*?)\] ".*? (.*?) .*?".*"(.*?)"\(s\)`).FindAllStringSubmatch(line, -1)
 	// d := res[0][1]
@@ -33,8 +34,11 @@ func main() {
 
 	//testMap()
 
-	sentInfulx()
-	select {}
+	sendInfulx()
+	// t1 := time.Unix(1495468773792/1000, 0)
+
+	// fmt.Println(t1)
+	// fmt.Println(t1.UTC())
 }
 
 func parseURL(url string) (baseURL string, queryString string) {
@@ -155,52 +159,33 @@ func testMap() {
 	}
 }
 
-func sentInfulx() {
-	// body := make([]string, 0)
-	// //body = append(body, "test,host=server02 value=0.67 1434055562000000000\n")1434055562000000000
-	// body = append(body, "abc,host=server02 value=0.674 1495471620000")
-	// //body = append(body, "test224,host=server02 value=0.64 1495471620000\n")
-	// //body = append(body, "test224,host=server02 value=0.64 1495471620000")
+func sendInfulx() {
 
-	// //sbody := strings.Join(body, "")
-	// resp, err := http.Post("http://10.50.8.91:8086/write?db=fhh&&precision=ms", "", strings.NewReader("abc1,host=server01,region=us-west value=0.64 1495471620000"))
-	// if err != nil {
-	// 	fmt.Println("save to influx err:", err)
-	// 	return
-	// }
-	// defer resp.Body.Close()
-	// data, _ := ioutil.ReadAll(resp.Body)
-	// fmt.Println(string(data))
-	c, err := client.NewHTTPClient(client.HTTPConfig{Addr: "http://10.50.8.91:8086"})
+	//sbody := strings.Join(body, "")
+	t1 := time.Unix(1495468774792/1000, 0)
+	fmt.Println(t1)
+	fmt.Println(t1.UTC())
+	fmt.Println(t1.UTC().UnixNano())
+	t := strconv.FormatInt(t1.UTC().UnixNano()/1e6, 10)
+	fmt.Println("-->", t)
+
+	body := make([]string, 0)
+	body = append(body, "test3,host=server02 value=0.67 "+t)
+	body = append(body, "test3,host=server02 value=0.674 "+t)
+	body = append(body, "test3,host=server02 value=0.64 "+t)
+	body = append(body, "test3,host=server02 value=0.64 "+t)
+
+	resp, err := http.Post("http://localhost:8086/write?db=fhh&&precision=ms", "", strings.NewReader(strings.Join(body, "\n")))
+	if err != nil {
+		fmt.Println("save to influx err:", err)
+		return
+	}
+	defer resp.Body.Close()
+	data, _ := ioutil.ReadAll(resp.Body)
+	fmt.Println(string(data))
+
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	// Create a new point batch
-	bp, err := client.NewBatchPoints(client.BatchPointsConfig{
-		Database:  "fhh",
-		Precision: "ms",
-	})
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	// Create a point and add to batch
-	tags := map[string]string{"cpu": "cpu-total"}
-	fields := map[string]interface{}{
-		"idle":   10.1,
-		"system": 53.3,
-		"user":   46.6,
-		"time":   1495875117}
-	fmt.Println(time.Now().Unix())
-	pt, err := client.NewPoint("myPoint4", tags, fields)
-	if err != nil {
-		fmt.Println(err)
-	}
-	bp.AddPoint(pt)
-
-	// Write the batch
-	if err := c.Write(bp); err != nil {
-		fmt.Println(err)
-	}
 }
